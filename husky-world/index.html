@@ -25,7 +25,20 @@
     import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xbfd1e5);
+
+    const skyCanvas = document.createElement("canvas");
+    skyCanvas.width = 2;
+    skyCanvas.height = 512;
+    const skyContext = skyCanvas.getContext("2d");
+    const skyGradient = skyContext.createLinearGradient(0, 0, 0, skyCanvas.height);
+    skyGradient.addColorStop(0, "#7ec5f3");
+    skyGradient.addColorStop(1, "#dff3ff");
+    skyContext.fillStyle = skyGradient;
+    skyContext.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
+    const skyTexture = new THREE.CanvasTexture(skyCanvas);
+    skyTexture.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTexture;
+    scene.fog = new THREE.Fog(0xc8e4f5, 60, 240);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -48,11 +61,37 @@
     directionalLight.position.set(5, 10, 5);
     scene.add(directionalLight);
 
+    const grassCanvas = document.createElement("canvas");
+    grassCanvas.width = 256;
+    grassCanvas.height = 256;
+    const grassContext = grassCanvas.getContext("2d");
+    grassContext.fillStyle = "#68a349";
+    grassContext.fillRect(0, 0, grassCanvas.width, grassCanvas.height);
+    for (let i = 0; i < 900; i += 1) {
+      const shade = 80 + Math.floor(Math.random() * 70);
+      grassContext.fillStyle = `rgb(${30 + Math.floor(Math.random() * 25)}, ${shade}, ${25 + Math.floor(Math.random() * 20)})`;
+      const x = Math.floor(Math.random() * grassCanvas.width);
+      const y = Math.floor(Math.random() * grassCanvas.height);
+      grassContext.fillRect(x, y, 2, 2);
+    }
+    const grassTexture = new THREE.CanvasTexture(grassCanvas);
+    grassTexture.colorSpace = THREE.SRGBColorSpace;
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(90, 90);
+    grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshStandardMaterial({ color: 0x7fa66b })
+      new THREE.PlaneGeometry(300, 300),
+      new THREE.MeshStandardMaterial({
+        color: 0x6ca34a,
+        map: grassTexture,
+        roughness: 0.96,
+        metalness: 0.0
+      })
     );
     ground.rotation.x = -Math.PI / 2;
+    ground.position.y = 0;
     scene.add(ground);
 
     const marker = new THREE.Mesh(
