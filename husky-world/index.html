@@ -291,6 +291,172 @@
       scene.add(tree);
     }
 
+    class Husky {
+      constructor({ furColor, whiteColor = 0xf2f2ee, noseColor = 0x1a1a1a }) {
+        this.group = new THREE.Group();
+
+        const furMaterial = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.88 });
+        const whiteMaterial = new THREE.MeshStandardMaterial({ color: whiteColor, roughness: 0.9 });
+        const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.4 });
+        const noseMaterial = new THREE.MeshStandardMaterial({ color: noseColor, roughness: 0.5 });
+
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(0.95, 0.26, 0.35),
+          furMaterial
+        );
+        body.position.set(0, 0.51, 0);
+        this.group.add(body);
+
+        const belly = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9, 0.14, 0.3),
+          whiteMaterial
+        );
+        belly.position.set(0.02, 0.4, 0);
+        this.group.add(belly);
+
+        const chest = new THREE.Mesh(
+          new THREE.SphereGeometry(0.16, 20, 16),
+          whiteMaterial
+        );
+        chest.scale.set(1.05, 0.95, 1);
+        chest.position.set(0.39, 0.46, 0);
+        this.group.add(chest);
+
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.17, 24, 18),
+          furMaterial
+        );
+        head.position.set(0.56, 0.62, 0);
+        this.group.add(head);
+
+        const snout = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.075, 0.055, 0.24, 20),
+          whiteMaterial
+        );
+        snout.rotation.z = -Math.PI / 2;
+        snout.position.set(0.73, 0.58, 0);
+        this.group.add(snout);
+
+        const nose = new THREE.Mesh(
+          new THREE.SphereGeometry(0.04, 14, 12),
+          noseMaterial
+        );
+        nose.position.set(0.86, 0.58, 0);
+        this.group.add(nose);
+
+        const foreheadMarking = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.16, 0.1),
+          whiteMaterial
+        );
+        foreheadMarking.position.set(0.59, 0.67, 0);
+        this.group.add(foreheadMarking);
+
+        const muzzleMarkingLeft = new THREE.Mesh(
+          new THREE.SphereGeometry(0.075, 16, 12),
+          whiteMaterial
+        );
+        muzzleMarkingLeft.position.set(0.67, 0.56, 0.08);
+        this.group.add(muzzleMarkingLeft);
+
+        const muzzleMarkingRight = new THREE.Mesh(
+          new THREE.SphereGeometry(0.075, 16, 12),
+          whiteMaterial
+        );
+        muzzleMarkingRight.position.set(0.67, 0.56, -0.08);
+        this.group.add(muzzleMarkingRight);
+
+        const earGeometry = new THREE.ConeGeometry(0.055, 0.16, 4);
+        const leftEar = new THREE.Mesh(earGeometry, furMaterial);
+        leftEar.position.set(0.5, 0.8, 0.1);
+        leftEar.rotation.x = -0.2;
+        leftEar.rotation.z = -0.07;
+        this.group.add(leftEar);
+
+        const rightEar = new THREE.Mesh(earGeometry, furMaterial);
+        rightEar.position.set(0.5, 0.8, -0.1);
+        rightEar.rotation.x = 0.2;
+        rightEar.rotation.z = -0.07;
+        this.group.add(rightEar);
+
+        const eyeGeometry = new THREE.SphereGeometry(0.019, 10, 8);
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(0.69, 0.64, 0.07);
+        this.group.add(leftEye);
+
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(0.69, 0.64, -0.07);
+        this.group.add(rightEye);
+
+        const legPositions = [
+          [0.31, 0.18, 0.12],
+          [0.31, 0.18, -0.12],
+          [-0.3, 0.18, 0.12],
+          [-0.3, 0.18, -0.12]
+        ];
+
+        legPositions.forEach(([x, y, z]) => {
+          const leg = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.36, 0.1),
+            furMaterial
+          );
+          leg.position.set(x, y, z);
+          this.group.add(leg);
+
+          const paw = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.08, 0.105),
+            whiteMaterial
+          );
+          paw.position.set(x, 0.04, z);
+          this.group.add(paw);
+        });
+
+        const tailSegmentA = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.045, 0.2, 12),
+          furMaterial
+        );
+        tailSegmentA.position.set(-0.58, 0.64, 0);
+        tailSegmentA.rotation.z = 1.2;
+        this.group.add(tailSegmentA);
+
+        const tailSegmentB = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.043, 0.038, 0.17, 12),
+          furMaterial
+        );
+        tailSegmentB.position.set(-0.67, 0.72, 0);
+        tailSegmentB.rotation.z = 0.86;
+        this.group.add(tailSegmentB);
+
+        const tailSegmentC = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.036, 0.03, 0.14, 12),
+          whiteMaterial
+        );
+        tailSegmentC.position.set(-0.73, 0.79, 0);
+        tailSegmentC.rotation.z = 0.57;
+        this.group.add(tailSegmentC);
+
+        const tailFluff = new THREE.Mesh(
+          new THREE.SphereGeometry(0.05, 14, 10),
+          whiteMaterial
+        );
+        tailFluff.position.set(-0.76, 0.85, 0);
+        this.group.add(tailFluff);
+      }
+    }
+
+    function createHusky(options) {
+      return new Husky(options).group;
+    }
+
+    const femaleHusky = createHusky({ furColor: 0x1f2129 });
+    femaleHusky.position.set(-3.2, 0, -2.3);
+    femaleHusky.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(femaleHusky);
+
+    const maleHusky = createHusky({ furColor: 0xa75b32 });
+    maleHusky.position.set(2.6, 0, 1.8);
+    maleHusky.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(maleHusky);
+
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
