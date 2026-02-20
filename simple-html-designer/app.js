@@ -11,6 +11,9 @@ class DesignerApp {
     this.selectedElementId = null;
     this.elementCounter = 0;
     this.spawnOffset = 0;
+    this.minElementSize = 50;
+    this.activeInteraction = null;
+    this.resizeDirections = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
     this.controlsPanel = document.getElementById("controls-panel");
 
     this.initializeCanvas();
@@ -25,6 +28,9 @@ class DesignerApp {
     }
     if (!this.canvas.style.minHeight) {
       this.canvas.style.minHeight = "400px";
+    }
+    if (!this.canvas.style.overflow) {
+      this.canvas.style.overflow = "hidden";
     }
   }
 
@@ -120,14 +126,22 @@ class DesignerApp {
   }
 
   createElement({ type, x, y, width, height, content }) {
+    const normalizedWidth = Math.max(width, this.minElementSize);
+    const normalizedHeight = Math.max(height, this.minElementSize);
+    const normalizedPosition = this.getBoundedPosition(
+      x,
+      y,
+      normalizedWidth,
+      normalizedHeight
+    );
     const id = this.getNextElementId();
     const elementData = {
       id,
       type,
-      x,
-      y,
-      width,
-      height,
+      x: normalizedPosition.x,
+      y: normalizedPosition.y,
+      width: normalizedWidth,
+      height: normalizedHeight,
       content,
     };
 
@@ -135,14 +149,11 @@ class DesignerApp {
     elementNode.id = id;
     elementNode.className = "layout-element";
     elementNode.style.position = "absolute";
-    elementNode.style.left = `${x}px`;
-    elementNode.style.top = `${y}px`;
-    elementNode.style.width = `${width}px`;
-    elementNode.style.height = `${height}px`;
     elementNode.style.boxSizing = "border-box";
     elementNode.style.border = "1px solid #9ca3af";
     elementNode.style.background = "#ffffff";
     elementNode.style.cursor = "pointer";
+    elementNode.style.overflow = "visible";
 
     if (type === "text") {
       elementNode.textContent = content;
@@ -158,6 +169,9 @@ class DesignerApp {
       elementNode.style.color = "#374151";
       elementNode.style.fontSize = "12px";
     }
+
+    this.applyElementLayout(elementNode, elementData);
+    this.addResizeHandles(elementNode);
 
     elementNode.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -207,6 +221,10 @@ class DesignerApp {
     }
 
     const idToDelete = this.selectedElementId;
+    if (this.activeInteraction && this.activeInteraction.elementId === idToDelete) {
+      this.endInteraction();
+    }
+
     this.elements = this.elements.filter((item) => item.id !== idToDelete);
 
     const elementNode = this.getElementNode(idToDelete);
@@ -224,6 +242,18 @@ class DesignerApp {
         this.selectElement(null);
       }
     });
+
+    this.canvas.addEventListener("mousedown", (event) => {
+      this.handleCanvasMouseDown(event);
+    });
+
+    document.addEventListener("mousemove", (event) => {
+      this.handleDocumentMouseMove(event);
+    });
+
+    document.addEventListener("mouseup", () => {
+      this.handleDocumentMouseUp();
+    });
   }
 
   getElementNode(elementId) {
@@ -231,6 +261,294 @@ class DesignerApp {
       return null;
     }
     return document.getElementById(elementId);
+  }
+
+  getElementData(elementId) {
+    if (!elementId) {
+      return null;
+    }
+    return this.elements.find((item) => item.id === elementId) ?? null;
+  }
+
+  getCanvasSize() {
+    return {
+      width: this.canvas.clientWidth || this.canvas.offsetWidth || 0,
+      height: this.canvas.clientHeight || this.canvas.offsetHeight || 0,
+    };
+  }
+
+  getBoundedPosition(x, y, width, height) {
+    const { width: canvasWidth, height: canvasHeight } = this.getCanvasSize();
+    const maxX = Math.max(0, canvasWidth - width);
+    const maxY = Math.max(0, canvasHeight - height);
+
+    return {
+      x: this.clamp(x, 0, maxX),
+      y: this.clamp(y, 0, maxY),
+    };
+  }
+
+  applyElementLayout(elementNode, elementData) {
+    elementNode.style.left = `${elementData.x}px`;
+    elementNode.style.top = `${elementData.y}px`;
+    elementNode.style.width = `${elementData.width}px`;
+    elementNode.style.height = `${elementData.height}px`;
+  }
+
+  addResizeHandles(elementNode) {
+    this.resizeDirections.forEach((direction) => {
+      const handle = document.createElement("div");
+      handle.className = `resize-handle resize-handle--${direction}`;
+      handle.dataset.direction = direction;
+      elementNode.appendChild(handle);
+    });
+  }
+
+  handleCanvasMouseDown(event) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const handleNode = event.target.closest(".resize-handle");
+    if (handleNode && this.canvas.contains(handleNode)) {
+      const elementNode = handleNode.closest(".layout-element");
+      if (!elementNode) {
+        return;
+      }
+
+      this.selectElement(elementNode.id);
+      this.startResizeInteraction(elementNode.id, handleNode.dataset.direction, event);
+      return;
+    }
+
+    const elementNode = event.target.closest(".layout-element");
+    if (elementNode && this.canvas.contains(elementNode)) {
+      this.selectElement(elementNode.id);
+      this.startDragInteraction(elementNode.id, event);
+      return;
+    }
+  }
+
+  startDragInteraction(elementId, event) {
+    const elementData = this.getElementData(elementId);
+    const elementNode = this.getElementNode(elementId);
+    if (!elementData || !elementNode) {
+      return;
+    }
+
+    const canvasSize = this.getCanvasSize();
+    this.activeInteraction = {
+      type: "drag",
+      elementId,
+      startMouseX: event.clientX,
+      startMouseY: event.clientY,
+      startX: elementData.x,
+      startY: elementData.y,
+      width: elementData.width,
+      height: elementData.height,
+      canvasWidth: canvasSize.width,
+      canvasHeight: canvasSize.height,
+    };
+
+    elementNode.classList.add("is-dragging");
+    this.canvas.classList.add("is-dragging");
+    this.beginInteraction("grabbing");
+    event.preventDefault();
+  }
+
+  startResizeInteraction(elementId, direction, event) {
+    const elementData = this.getElementData(elementId);
+    const elementNode = this.getElementNode(elementId);
+    if (!elementData || !elementNode || !direction) {
+      return;
+    }
+
+    const canvasSize = this.getCanvasSize();
+    this.activeInteraction = {
+      type: "resize",
+      elementId,
+      direction,
+      startMouseX: event.clientX,
+      startMouseY: event.clientY,
+      startX: elementData.x,
+      startY: elementData.y,
+      startWidth: elementData.width,
+      startHeight: elementData.height,
+      canvasWidth: canvasSize.width,
+      canvasHeight: canvasSize.height,
+    };
+
+    elementNode.classList.add("is-resizing");
+    this.canvas.classList.add("is-resizing");
+    this.beginInteraction(this.getResizeCursor(direction));
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  beginInteraction(cursor) {
+    document.body.classList.add("designer-no-select");
+    document.body.style.cursor = cursor;
+  }
+
+  endInteraction() {
+    if (!this.activeInteraction) {
+      return;
+    }
+
+    const activeElementNode = this.getElementNode(this.activeInteraction.elementId);
+    if (activeElementNode) {
+      activeElementNode.classList.remove("is-dragging");
+      activeElementNode.classList.remove("is-resizing");
+    }
+
+    this.canvas.classList.remove("is-dragging");
+    this.canvas.classList.remove("is-resizing");
+    this.activeInteraction = null;
+    document.body.classList.remove("designer-no-select");
+    document.body.style.cursor = "";
+  }
+
+  handleDocumentMouseMove(event) {
+    if (!this.activeInteraction) {
+      return;
+    }
+
+    if (this.activeInteraction.type === "drag") {
+      this.updateDragInteraction(event);
+    } else if (this.activeInteraction.type === "resize") {
+      this.updateResizeInteraction(event);
+    }
+
+    event.preventDefault();
+  }
+
+  handleDocumentMouseUp() {
+    if (!this.activeInteraction) {
+      return;
+    }
+    this.endInteraction();
+  }
+
+  updateDragInteraction(event) {
+    const interaction = this.activeInteraction;
+    const elementData = this.getElementData(interaction.elementId);
+    const elementNode = this.getElementNode(interaction.elementId);
+    if (!elementData || !elementNode) {
+      this.endInteraction();
+      return;
+    }
+
+    const deltaX = event.clientX - interaction.startMouseX;
+    const deltaY = event.clientY - interaction.startMouseY;
+    const maxX = Math.max(0, interaction.canvasWidth - interaction.width);
+    const maxY = Math.max(0, interaction.canvasHeight - interaction.height);
+    const x = this.clamp(interaction.startX + deltaX, 0, maxX);
+    const y = this.clamp(interaction.startY + deltaY, 0, maxY);
+
+    if (x === elementData.x && y === elementData.y) {
+      return;
+    }
+
+    elementData.x = x;
+    elementData.y = y;
+    this.applyElementLayout(elementNode, elementData);
+  }
+
+  updateResizeInteraction(event) {
+    const interaction = this.activeInteraction;
+    const elementData = this.getElementData(interaction.elementId);
+    const elementNode = this.getElementNode(interaction.elementId);
+    if (!elementData || !elementNode) {
+      this.endInteraction();
+      return;
+    }
+
+    const deltaX = event.clientX - interaction.startMouseX;
+    const deltaY = event.clientY - interaction.startMouseY;
+    const direction = interaction.direction;
+    let x = interaction.startX;
+    let y = interaction.startY;
+    let width = interaction.startWidth;
+    let height = interaction.startHeight;
+
+    if (direction.includes("e")) {
+      const maxWidth = Math.max(
+        this.minElementSize,
+        interaction.canvasWidth - interaction.startX
+      );
+      width = this.clamp(
+        interaction.startWidth + deltaX,
+        this.minElementSize,
+        maxWidth
+      );
+    }
+
+    if (direction.includes("s")) {
+      const maxHeight = Math.max(
+        this.minElementSize,
+        interaction.canvasHeight - interaction.startY
+      );
+      height = this.clamp(
+        interaction.startHeight + deltaY,
+        this.minElementSize,
+        maxHeight
+      );
+    }
+
+    if (direction.includes("w")) {
+      const rightEdge = interaction.startX + interaction.startWidth;
+      const maxX = rightEdge - this.minElementSize;
+      x = this.clamp(interaction.startX + deltaX, 0, maxX);
+      width = rightEdge - x;
+    }
+
+    if (direction.includes("n")) {
+      const bottomEdge = interaction.startY + interaction.startHeight;
+      const maxY = bottomEdge - this.minElementSize;
+      y = this.clamp(interaction.startY + deltaY, 0, maxY);
+      height = bottomEdge - y;
+    }
+
+    const maxXByWidth = Math.max(0, interaction.canvasWidth - width);
+    const maxYByHeight = Math.max(0, interaction.canvasHeight - height);
+    x = this.clamp(x, 0, maxXByWidth);
+    y = this.clamp(y, 0, maxYByHeight);
+
+    if (
+      x === elementData.x &&
+      y === elementData.y &&
+      width === elementData.width &&
+      height === elementData.height
+    ) {
+      return;
+    }
+
+    elementData.x = x;
+    elementData.y = y;
+    elementData.width = width;
+    elementData.height = height;
+    this.applyElementLayout(elementNode, elementData);
+  }
+
+  getResizeCursor(direction) {
+    const cursorMap = {
+      n: "ns-resize",
+      s: "ns-resize",
+      e: "ew-resize",
+      w: "ew-resize",
+      ne: "nesw-resize",
+      sw: "nesw-resize",
+      nw: "nwse-resize",
+      se: "nwse-resize",
+    };
+    return cursorMap[direction] || "default";
+  }
+
+  clamp(value, min, max) {
+    if (max < min) {
+      return min;
+    }
+    return Math.min(Math.max(value, min), max);
   }
 }
 
