@@ -41,6 +41,22 @@
     #instructions.hidden {
       display: none;
     }
+
+    .pet-feedback {
+      position: fixed;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      color: #fff6cf;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65);
+      transform: translate(-50%, -50%);
+      z-index: 9;
+      white-space: nowrap;
+      opacity: 0;
+    }
   </style>
 </head>
 <body>
@@ -99,9 +115,21 @@
       KeyS: false,
       KeyD: false
     };
+    const raycaster = new THREE.Raycaster();
+    const clickNdc = new THREE.Vector2();
+    const dogs = [];
+    const dogMeshes = [];
+    const floatingTexts = [];
+    const tempVector = new THREE.Vector3();
+    const tempVector2 = new THREE.Vector3();
+    const worldCenter = new THREE.Vector3(0, 0, 0);
 
     let yaw = 0;
     let pitch = 0;
+    let elapsedSeconds = 0;
+    let nextPlayTime = THREE.MathUtils.randFloat(8, 14);
+    let audioContext = null;
+    let barkNoiseBuffer = null;
 
     camera.rotation.order = "YXZ";
 
@@ -151,7 +179,9 @@
       }
     }
 
-    function onCanvasClick() {
+    function onCanvasClick(event) {
+      ensureAudioContext();
+      tryPetDogFromClick(event);
       if (document.pointerLockElement !== canvas) {
         canvas.requestPointerLock();
       }
@@ -294,6 +324,11 @@
     class Husky {
       constructor({ furColor, whiteColor = 0xf2f2ee, noseColor = 0x1a1a1a }) {
         this.group = new THREE.Group();
+        this.bodyRig = new THREE.Group();
+        this.group.add(this.bodyRig);
+        this.legs = [];
+        this.legBaseY = [];
+        this.tailParts = [];
 
         const furMaterial = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.88 });
         const whiteMaterial = new THREE.MeshStandardMaterial({ color: whiteColor, roughness: 0.9 });
@@ -305,14 +340,14 @@
           furMaterial
         );
         body.position.set(0, 0.51, 0);
-        this.group.add(body);
+        this.bodyRig.add(body);
 
         const belly = new THREE.Mesh(
           new THREE.BoxGeometry(0.9, 0.14, 0.3),
           whiteMaterial
         );
         belly.position.set(0.02, 0.4, 0);
-        this.group.add(belly);
+        this.bodyRig.add(belly);
 
         const chest = new THREE.Mesh(
           new THREE.SphereGeometry(0.16, 20, 16),
@@ -320,14 +355,14 @@
         );
         chest.scale.set(1.05, 0.95, 1);
         chest.position.set(0.39, 0.46, 0);
-        this.group.add(chest);
+        this.bodyRig.add(chest);
 
         const head = new THREE.Mesh(
           new THREE.SphereGeometry(0.17, 24, 18),
           furMaterial
         );
         head.position.set(0.56, 0.62, 0);
-        this.group.add(head);
+        this.bodyRig.add(head);
 
         const snout = new THREE.Mesh(
           new THREE.CylinderGeometry(0.075, 0.055, 0.24, 20),
@@ -335,79 +370,86 @@
         );
         snout.rotation.z = -Math.PI / 2;
         snout.position.set(0.73, 0.58, 0);
-        this.group.add(snout);
+        this.bodyRig.add(snout);
 
         const nose = new THREE.Mesh(
           new THREE.SphereGeometry(0.04, 14, 12),
           noseMaterial
         );
         nose.position.set(0.86, 0.58, 0);
-        this.group.add(nose);
+        this.bodyRig.add(nose);
 
         const foreheadMarking = new THREE.Mesh(
           new THREE.BoxGeometry(0.08, 0.16, 0.1),
           whiteMaterial
         );
         foreheadMarking.position.set(0.59, 0.67, 0);
-        this.group.add(foreheadMarking);
+        this.bodyRig.add(foreheadMarking);
 
         const muzzleMarkingLeft = new THREE.Mesh(
           new THREE.SphereGeometry(0.075, 16, 12),
           whiteMaterial
         );
         muzzleMarkingLeft.position.set(0.67, 0.56, 0.08);
-        this.group.add(muzzleMarkingLeft);
+        this.bodyRig.add(muzzleMarkingLeft);
 
         const muzzleMarkingRight = new THREE.Mesh(
           new THREE.SphereGeometry(0.075, 16, 12),
           whiteMaterial
         );
         muzzleMarkingRight.position.set(0.67, 0.56, -0.08);
-        this.group.add(muzzleMarkingRight);
+        this.bodyRig.add(muzzleMarkingRight);
 
         const earGeometry = new THREE.ConeGeometry(0.055, 0.16, 4);
         const leftEar = new THREE.Mesh(earGeometry, furMaterial);
         leftEar.position.set(0.5, 0.8, 0.1);
         leftEar.rotation.x = -0.2;
         leftEar.rotation.z = -0.07;
-        this.group.add(leftEar);
+        this.bodyRig.add(leftEar);
 
         const rightEar = new THREE.Mesh(earGeometry, furMaterial);
         rightEar.position.set(0.5, 0.8, -0.1);
         rightEar.rotation.x = 0.2;
         rightEar.rotation.z = -0.07;
-        this.group.add(rightEar);
+        this.bodyRig.add(rightEar);
 
         const eyeGeometry = new THREE.SphereGeometry(0.019, 10, 8);
         const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
         leftEye.position.set(0.69, 0.64, 0.07);
-        this.group.add(leftEye);
+        this.bodyRig.add(leftEye);
 
         const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
         rightEye.position.set(0.69, 0.64, -0.07);
-        this.group.add(rightEye);
+        this.bodyRig.add(rightEye);
 
         const legPositions = [
-          [0.31, 0.18, 0.12],
-          [0.31, 0.18, -0.12],
-          [-0.3, 0.18, 0.12],
-          [-0.3, 0.18, -0.12]
+          [0.31, 0.36, 0.12],
+          [0.31, 0.36, -0.12],
+          [-0.3, 0.36, 0.12],
+          [-0.3, 0.36, -0.12]
         ];
 
         legPositions.forEach(([x, y, z]) => {
+          const legPivot = new THREE.Group();
+          legPivot.position.set(x, y, z);
+
           const leg = new THREE.Mesh(
             new THREE.BoxGeometry(0.1, 0.36, 0.1),
             furMaterial
           );
-          leg.position.set(x, y, z);
-          this.group.add(leg);
+          leg.position.set(0, -0.18, 0);
+          legPivot.add(leg);
 
           const paw = new THREE.Mesh(
             new THREE.BoxGeometry(0.1, 0.08, 0.105),
             whiteMaterial
           );
-          paw.position.set(x, 0.04, z);
-          this.group.add(paw);
+          paw.position.set(0, -0.36, 0);
+          legPivot.add(paw);
+
+          this.group.add(legPivot);
+          this.legs.push(legPivot);
+          this.legBaseY.push(y);
         });
 
         const tailSegmentA = new THREE.Mesh(
@@ -416,7 +458,8 @@
         );
         tailSegmentA.position.set(-0.58, 0.64, 0);
         tailSegmentA.rotation.z = 1.2;
-        this.group.add(tailSegmentA);
+        this.bodyRig.add(tailSegmentA);
+        this.tailParts.push(tailSegmentA);
 
         const tailSegmentB = new THREE.Mesh(
           new THREE.CylinderGeometry(0.043, 0.038, 0.17, 12),
@@ -424,7 +467,8 @@
         );
         tailSegmentB.position.set(-0.67, 0.72, 0);
         tailSegmentB.rotation.z = 0.86;
-        this.group.add(tailSegmentB);
+        this.bodyRig.add(tailSegmentB);
+        this.tailParts.push(tailSegmentB);
 
         const tailSegmentC = new THREE.Mesh(
           new THREE.CylinderGeometry(0.036, 0.03, 0.14, 12),
@@ -432,30 +476,387 @@
         );
         tailSegmentC.position.set(-0.73, 0.79, 0);
         tailSegmentC.rotation.z = 0.57;
-        this.group.add(tailSegmentC);
+        this.bodyRig.add(tailSegmentC);
+        this.tailParts.push(tailSegmentC);
 
         const tailFluff = new THREE.Mesh(
           new THREE.SphereGeometry(0.05, 14, 10),
           whiteMaterial
         );
         tailFluff.position.set(-0.76, 0.85, 0);
-        this.group.add(tailFluff);
+        this.bodyRig.add(tailFluff);
+        this.tailParts.push(tailFluff);
       }
     }
 
-    function createHusky(options) {
-      return new Husky(options).group;
+    function ensureAudioContext() {
+      if (!audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+          return null;
+        }
+        audioContext = new AudioContextClass();
+      }
+
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+
+      return audioContext;
     }
 
-    const femaleHusky = createHusky({ furColor: 0x1f2129 });
-    femaleHusky.position.set(-3.2, 0, -2.3);
-    femaleHusky.rotation.y = Math.random() * Math.PI * 2;
-    scene.add(femaleHusky);
+    function getBarkNoiseBuffer(context) {
+      if (barkNoiseBuffer && barkNoiseBuffer.sampleRate === context.sampleRate) {
+        return barkNoiseBuffer;
+      }
 
-    const maleHusky = createHusky({ furColor: 0xa75b32 });
-    maleHusky.position.set(2.6, 0, 1.8);
-    maleHusky.rotation.y = Math.random() * Math.PI * 2;
-    scene.add(maleHusky);
+      const length = Math.floor(context.sampleRate * 0.22);
+      barkNoiseBuffer = context.createBuffer(1, length, context.sampleRate);
+      const data = barkNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) {
+        const taper = 1 - i / length;
+        data[i] = (Math.random() * 2 - 1) * taper;
+      }
+
+      return barkNoiseBuffer;
+    }
+
+    function playBark({ happy = false, pitchOffset = 0 }) {
+      const context = ensureAudioContext();
+      if (!context) {
+        return;
+      }
+
+      const now = context.currentTime;
+      const barkDuration = happy ? 0.28 : 0.22;
+
+      const masterGain = context.createGain();
+      masterGain.gain.setValueAtTime(0.0001, now);
+      masterGain.gain.exponentialRampToValueAtTime(happy ? 0.22 : 0.17, now + 0.02);
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, now + barkDuration);
+      masterGain.connect(context.destination);
+
+      const oscillator = context.createOscillator();
+      oscillator.type = happy ? "triangle" : "square";
+      oscillator.frequency.setValueAtTime((happy ? 520 : 420) + pitchOffset * 45, now);
+      oscillator.frequency.exponentialRampToValueAtTime((happy ? 250 : 210) + pitchOffset * 20, now + barkDuration);
+      oscillator.connect(masterGain);
+      oscillator.start(now);
+      oscillator.stop(now + barkDuration);
+
+      const noiseSource = context.createBufferSource();
+      noiseSource.buffer = getBarkNoiseBuffer(context);
+      const noiseFilter = context.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.setValueAtTime(happy ? 1200 : 900, now);
+      noiseFilter.Q.value = 0.9;
+
+      const noiseGain = context.createGain();
+      noiseGain.gain.setValueAtTime(happy ? 0.35 : 0.3, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + barkDuration);
+
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(masterGain);
+      noiseSource.start(now);
+      noiseSource.stop(now + barkDuration);
+    }
+
+    function rotateYToward(object, targetYaw, rate) {
+      const delta = THREE.MathUtils.euclideanModulo(targetYaw - object.rotation.y + Math.PI, Math.PI * 2) - Math.PI;
+      object.rotation.y += delta * Math.min(1, rate);
+    }
+
+    function showPetText({ text, dog }) {
+      const element = document.createElement("div");
+      element.className = "pet-feedback";
+      element.textContent = text;
+      document.body.appendChild(element);
+
+      floatingTexts.push({
+        dog,
+        element,
+        elapsed: 0,
+        duration: THREE.MathUtils.randFloat(1.35, 1.8)
+      });
+    }
+
+    function updateFloatingTexts(deltaSeconds) {
+      for (let i = floatingTexts.length - 1; i >= 0; i -= 1) {
+        const item = floatingTexts[i];
+        item.elapsed += deltaSeconds;
+
+        if (item.elapsed >= item.duration) {
+          item.element.remove();
+          floatingTexts.splice(i, 1);
+          continue;
+        }
+
+        tempVector.set(
+          item.dog.group.position.x,
+          item.dog.group.position.y + 1.25 + item.elapsed * 0.2,
+          item.dog.group.position.z
+        );
+        tempVector.project(camera);
+
+        if (tempVector.z < -1 || tempVector.z > 1) {
+          item.element.style.opacity = "0";
+          continue;
+        }
+
+        const x = (tempVector.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-tempVector.y * 0.5 + 0.5) * window.innerHeight - item.elapsed * 20;
+        item.element.style.left = `${x}px`;
+        item.element.style.top = `${y}px`;
+        item.element.style.opacity = `${1 - item.elapsed / item.duration}`;
+      }
+    }
+
+    class DogAgent {
+      constructor({ furColor, startPosition, compliment, pitchOffset }) {
+        const husky = new Husky({ furColor });
+        this.group = husky.group;
+        this.bodyRig = husky.bodyRig;
+        this.legs = husky.legs;
+        this.legBaseY = husky.legBaseY;
+        this.tailParts = husky.tailParts;
+
+        this.group.position.copy(startPosition);
+        this.group.rotation.y = Math.random() * Math.PI * 2;
+        this.group.userData.dogAgent = this;
+
+        this.compliment = compliment;
+        this.pitchOffset = pitchOffset;
+        this.walkSpeed = THREE.MathUtils.randFloat(1.0, 1.45);
+        this.maxRadius = 15;
+        this.state = "pause";
+        this.target = new THREE.Vector3(startPosition.x, 0, startPosition.z);
+        this.pauseTimer = THREE.MathUtils.randFloat(0.2, 1.1);
+        this.petTimer = 0;
+        this.walkPhase = Math.random() * Math.PI * 2;
+        this.wagPhase = Math.random() * Math.PI * 2;
+        this.sitBlend = 0;
+        this.legAngles = [0, 0, 0, 0];
+        this.nextBarkTime = elapsedSeconds + THREE.MathUtils.randFloat(5, 15);
+
+        this.group.traverse((child) => {
+          if (!child.isMesh) {
+            return;
+          }
+          child.userData.dogAgent = this;
+          dogMeshes.push(child);
+        });
+
+        scene.add(this.group);
+      }
+
+      setWalkTarget(target) {
+        this.target.copy(target);
+        this.target.y = 0;
+        const distanceToCenter = Math.hypot(this.target.x, this.target.z);
+        if (distanceToCenter > this.maxRadius) {
+          const clamp = this.maxRadius / distanceToCenter;
+          this.target.x *= clamp;
+          this.target.z *= clamp;
+        }
+        this.state = "walk";
+      }
+
+      pickRandomTarget() {
+        const angle = Math.random() * Math.PI * 2;
+        const stepDistance = THREE.MathUtils.randFloat(2.4, 6.3);
+        const target = new THREE.Vector3(
+          this.group.position.x + Math.cos(angle) * stepDistance,
+          0,
+          this.group.position.z + Math.sin(angle) * stepDistance
+        );
+        this.setWalkTarget(target);
+      }
+
+      startPause(minSeconds = 0.55, maxSeconds = 1.8) {
+        this.state = "pause";
+        this.pauseTimer = THREE.MathUtils.randFloat(minSeconds, maxSeconds);
+      }
+
+      pet() {
+        this.state = "petted";
+        this.petTimer = THREE.MathUtils.randFloat(2.1, 2.9);
+        playBark({ happy: true, pitchOffset: this.pitchOffset + 0.6 });
+        showPetText({
+          text: this.compliment,
+          dog: this
+        });
+      }
+
+      update(deltaSeconds, nowSeconds) {
+        if (nowSeconds >= this.nextBarkTime) {
+          if (this.state !== "petted") {
+            playBark({ happy: false, pitchOffset: this.pitchOffset + THREE.MathUtils.randFloat(-0.25, 0.25) });
+          }
+          this.nextBarkTime = nowSeconds + THREE.MathUtils.randFloat(5, 15);
+        }
+
+        let isWalking = false;
+
+        if (this.state === "petted") {
+          this.petTimer -= deltaSeconds;
+          if (this.petTimer <= 0) {
+            this.startPause(0.35, 1.0);
+          }
+        } else if (this.state === "pause") {
+          this.pauseTimer -= deltaSeconds;
+          if (this.pauseTimer <= 0) {
+            this.pickRandomTarget();
+          }
+        } else if (this.state === "walk") {
+          tempVector.subVectors(this.target, this.group.position);
+          tempVector.y = 0;
+          const distanceToTarget = tempVector.length();
+
+          if (distanceToTarget < 0.15) {
+            this.startPause();
+          } else {
+            isWalking = true;
+            tempVector.multiplyScalar(1 / distanceToTarget);
+            const walkStep = Math.min(distanceToTarget, this.walkSpeed * deltaSeconds);
+            this.group.position.addScaledVector(tempVector, walkStep);
+
+            const radialDistance = Math.hypot(this.group.position.x, this.group.position.z);
+            if (radialDistance > this.maxRadius) {
+              const clamp = this.maxRadius / radialDistance;
+              this.group.position.x *= clamp;
+              this.group.position.z *= clamp;
+              this.startPause(0.35, 0.8);
+            }
+
+            const desiredYaw = Math.atan2(-tempVector.z, tempVector.x);
+            rotateYToward(this.group, desiredYaw, deltaSeconds * 7);
+          }
+        }
+
+        this.sitBlend = THREE.MathUtils.damp(this.sitBlend, this.state === "petted" ? 1 : 0, 7, deltaSeconds);
+        this.bodyRig.position.y = THREE.MathUtils.lerp(0, -0.08, this.sitBlend);
+        this.bodyRig.rotation.z = THREE.MathUtils.lerp(0, -0.08, this.sitBlend);
+
+        if (isWalking) {
+          this.walkPhase += deltaSeconds * 9;
+        }
+
+        const walkSwing = isWalking ? Math.sin(this.walkPhase) * 0.5 : 0;
+        const walkTargets = [walkSwing, -walkSwing, -walkSwing, walkSwing];
+        const sitTargets = [0.45, 0.45, -1.05, -1.05];
+
+        for (let i = 0; i < this.legs.length; i += 1) {
+          const blendedTarget = THREE.MathUtils.lerp(walkTargets[i], sitTargets[i], this.sitBlend);
+          this.legAngles[i] = THREE.MathUtils.damp(this.legAngles[i], blendedTarget, 10, deltaSeconds);
+          this.legs[i].rotation.x = this.legAngles[i];
+
+          const sitY = i < 2 ? this.legBaseY[i] - 0.03 : this.legBaseY[i] - 0.08;
+          this.legs[i].position.y = THREE.MathUtils.lerp(this.legBaseY[i], sitY, this.sitBlend);
+        }
+
+        const wagSpeed = THREE.MathUtils.lerp(6.2, 15.5, this.sitBlend);
+        const wagAmount = THREE.MathUtils.lerp(0.16, 0.38, this.sitBlend);
+        this.wagPhase += deltaSeconds * wagSpeed;
+        const wagValue = Math.sin(this.wagPhase) * wagAmount;
+        const wagScale = [0.55, 0.8, 1.05, 1.2];
+
+        for (let i = 0; i < this.tailParts.length; i += 1) {
+          this.tailParts[i].rotation.y = wagValue * wagScale[i];
+        }
+      }
+    }
+
+    function pickDogFromClick(event) {
+      if (document.pointerLockElement === canvas) {
+        clickNdc.set(0, 0);
+      } else {
+        const rect = canvas.getBoundingClientRect();
+        clickNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        clickNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
+
+      raycaster.setFromCamera(clickNdc, camera);
+      const hits = raycaster.intersectObjects(dogMeshes, false);
+
+      for (let i = 0; i < hits.length; i += 1) {
+        const dog = hits[i].object.userData.dogAgent;
+        if (dog) {
+          return dog;
+        }
+      }
+
+      return null;
+    }
+
+    function tryPetDogFromClick(event) {
+      const dog = pickDogFromClick(event);
+      if (!dog) {
+        return null;
+      }
+      dog.pet();
+      return dog;
+    }
+
+    function triggerPlayTogether() {
+      if (dogs.length < 2) {
+        return;
+      }
+
+      const dogA = dogs[0];
+      const dogB = dogs[1];
+      if (dogA.state === "petted" || dogB.state === "petted") {
+        return;
+      }
+
+      tempVector.addVectors(dogA.group.position, dogB.group.position).multiplyScalar(0.5);
+      tempVector2.set(THREE.MathUtils.randFloatSpread(2.2), 0, THREE.MathUtils.randFloatSpread(2.2));
+      tempVector.add(tempVector2);
+
+      const centerDistance = tempVector.distanceTo(worldCenter);
+      if (centerDistance > 13.5) {
+        tempVector.multiplyScalar(13.5 / centerDistance);
+      }
+
+      tempVector2.subVectors(dogB.group.position, dogA.group.position);
+      tempVector2.y = 0;
+      if (tempVector2.lengthSq() < 0.0001) {
+        tempVector2.set(1, 0, 0);
+      } else {
+        tempVector2.normalize();
+      }
+
+      const offsetDistance = 0.8;
+      const targetA = new THREE.Vector3(
+        tempVector.x + tempVector2.x * offsetDistance,
+        0,
+        tempVector.z + tempVector2.z * offsetDistance
+      );
+      const targetB = new THREE.Vector3(
+        tempVector.x - tempVector2.x * offsetDistance,
+        0,
+        tempVector.z - tempVector2.z * offsetDistance
+      );
+
+      dogA.setWalkTarget(targetA);
+      dogB.setWalkTarget(targetB);
+    }
+
+    const femaleHusky = new DogAgent({
+      furColor: 0x1f2129,
+      startPosition: new THREE.Vector3(-3.2, 0, -2.3),
+      compliment: "Good girl!",
+      pitchOffset: 0.18
+    });
+    dogs.push(femaleHusky);
+
+    const maleHusky = new DogAgent({
+      furColor: 0xa75b32,
+      startPosition: new THREE.Vector3(2.6, 0, 1.8),
+      compliment: "Good boy!",
+      pitchOffset: -0.12
+    });
+    dogs.push(maleHusky);
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -469,7 +870,21 @@
     function animate() {
       requestAnimationFrame(animate);
       const deltaSeconds = clock.getDelta();
+      elapsedSeconds += deltaSeconds;
       updateMovement(deltaSeconds);
+
+      if (elapsedSeconds >= nextPlayTime) {
+        if (Math.random() < 0.72) {
+          triggerPlayTogether();
+        }
+        nextPlayTime = elapsedSeconds + THREE.MathUtils.randFloat(10, 18);
+      }
+
+      dogs.forEach((dog) => {
+        dog.update(deltaSeconds, elapsedSeconds);
+      });
+      updateFloatingTexts(deltaSeconds);
+
       renderer.render(scene, camera);
     }
 
