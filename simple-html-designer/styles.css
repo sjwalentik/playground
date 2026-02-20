@@ -125,6 +125,70 @@ section[aria-label="Designer Canvas"] {
   cursor: not-allowed;
 }
 
+.controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.controls-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.controls-heading {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sidebar-muted);
+}
+
+.controls-divider {
+  width: 100%;
+  margin: 2px 0;
+  border: 0;
+  border-top: 1px solid rgba(156, 163, 175, 0.35);
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control-field-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sidebar-muted);
+}
+
+.control-input {
+  width: 100%;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(15, 23, 42, 0.25);
+  color: var(--sidebar-text);
+}
+
+.control-input[type="color"] {
+  min-height: 34px;
+  padding: 3px;
+}
+
+.control-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .export-status {
   margin: 0;
   min-height: 1.2em;
@@ -151,7 +215,6 @@ section[aria-label="Designer Canvas"] {
 
 .layout-element:hover {
   border-color: var(--element-border);
-  background: var(--element-hover-bg);
 }
 
 .layout-element.is-selected {
