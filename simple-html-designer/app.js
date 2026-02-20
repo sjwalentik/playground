@@ -366,6 +366,36 @@ class DesignerApp {
     return "#ffffff";
   }
 
+  getCanvasExportBackgroundColor() {
+    const canvasStyles = window.getComputedStyle(this.canvas);
+    const cssVarColor = canvasStyles.getPropertyValue("--canvas-bg").trim();
+    if (cssVarColor) {
+      return cssVarColor;
+    }
+
+    const computedColor = canvasStyles.backgroundColor;
+    if (
+      computedColor &&
+      computedColor !== "transparent" &&
+      computedColor !== "rgba(0, 0, 0, 0)"
+    ) {
+      return computedColor;
+    }
+
+    return "#ffffff";
+  }
+
+  prepareClonedCanvasForExport(clonedDocument, backgroundColor) {
+    const clonedCanvas = clonedDocument.getElementById(this.canvas.id);
+    if (!clonedCanvas) {
+      return;
+    }
+
+    // Keep the exported image clean by removing editor-only visual treatment.
+    clonedCanvas.style.background = backgroundColor;
+    clonedCanvas.style.boxShadow = "none";
+  }
+
   async exportAsPng() {
     if (this.isExporting) {
       return;
@@ -394,10 +424,15 @@ class DesignerApp {
       await this.nextAnimationFrame();
 
       const { width, height } = this.getCanvasSize();
+      const exportBackground = this.getCanvasExportBackgroundColor();
       const renderedCanvas = await window.html2canvas(this.canvas, {
         scale: 1,
         width,
         height,
+        backgroundColor: exportBackground,
+        onclone: (clonedDocument) => {
+          this.prepareClonedCanvasForExport(clonedDocument, exportBackground);
+        },
       });
       const pngDataUrl = renderedCanvas.toDataURL("image/png");
       const filename = this.getExportFilename();
