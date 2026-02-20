@@ -11,6 +11,8 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      position: relative;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
 
     canvas {
@@ -18,9 +20,36 @@
       width: 100%;
       height: 100%;
     }
+
+    #instructions {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #ffffff;
+      background: rgba(18, 25, 40, 0.45);
+      font-size: 1rem;
+      line-height: 1.6;
+      letter-spacing: 0.015em;
+      z-index: 10;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+    }
+
+    #instructions.hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <div id="instructions">
+    Click to start<br />
+    W / A / S / D: Move<br />
+    Mouse: Look around<br />
+    Esc: Release mouse
+  </div>
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
 
@@ -53,6 +82,118 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
+
+    const canvas = renderer.domElement;
+    const instructions = document.getElementById("instructions");
+    const playerHeight = 1.7;
+    const walkSpeed = 5;
+    const lookSensitivity = 0.002;
+    const maxPitch = THREE.MathUtils.degToRad(85);
+    const movementDirection = new THREE.Vector3();
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const clock = new THREE.Clock();
+    const keyState = {
+      KeyW: false,
+      KeyA: false,
+      KeyS: false,
+      KeyD: false
+    };
+
+    let yaw = 0;
+    let pitch = 0;
+
+    camera.rotation.order = "YXZ";
+
+    function setInstructionVisibility() {
+      instructions.classList.toggle("hidden", document.pointerLockElement === canvas);
+    }
+
+    function clearMovementKeys() {
+      Object.keys(keyState).forEach((key) => {
+        keyState[key] = false;
+      });
+    }
+
+    function onPointerLockChange() {
+      if (document.pointerLockElement !== canvas) {
+        clearMovementKeys();
+      }
+      setInstructionVisibility();
+    }
+
+    function onMouseMove(event) {
+      if (document.pointerLockElement !== canvas) {
+        return;
+      }
+
+      yaw -= event.movementX * lookSensitivity;
+      pitch -= event.movementY * lookSensitivity;
+      pitch = THREE.MathUtils.clamp(pitch, -maxPitch, maxPitch);
+
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    }
+
+    function onKeyChange(event, isPressed) {
+      if (event.code === "Escape" && document.pointerLockElement === canvas) {
+        document.exitPointerLock();
+        return;
+      }
+
+      if (!(event.code in keyState)) {
+        return;
+      }
+
+      keyState[event.code] = isPressed;
+      if (document.pointerLockElement === canvas) {
+        event.preventDefault();
+      }
+    }
+
+    function onCanvasClick() {
+      if (document.pointerLockElement !== canvas) {
+        canvas.requestPointerLock();
+      }
+    }
+
+    function updateMovement(deltaSeconds) {
+      if (document.pointerLockElement !== canvas) {
+        camera.position.y = playerHeight;
+        return;
+      }
+
+      movementDirection.set(0, 0, 0);
+      forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+      right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+
+      if (keyState.KeyW) {
+        movementDirection.add(forward);
+      }
+      if (keyState.KeyS) {
+        movementDirection.sub(forward);
+      }
+      if (keyState.KeyD) {
+        movementDirection.add(right);
+      }
+      if (keyState.KeyA) {
+        movementDirection.sub(right);
+      }
+
+      if (movementDirection.lengthSq() > 0) {
+        movementDirection.normalize().multiplyScalar(walkSpeed * deltaSeconds);
+        camera.position.add(movementDirection);
+      }
+
+      camera.position.y = playerHeight;
+    }
+
+    canvas.addEventListener("click", onCanvasClick);
+    document.addEventListener("pointerlockchange", onPointerLockChange);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("keydown", (event) => onKeyChange(event, true));
+    document.addEventListener("keyup", (event) => onKeyChange(event, false));
+    setInstructionVisibility();
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -161,6 +302,8 @@
 
     function animate() {
       requestAnimationFrame(animate);
+      const deltaSeconds = clock.getDelta();
+      updateMovement(deltaSeconds);
       renderer.render(scene, camera);
     }
 
