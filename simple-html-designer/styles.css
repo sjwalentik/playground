@@ -72,6 +72,26 @@ main {
   border-color: #93c5fd;
 }
 
+#controls-panel button:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.export-status {
+  margin: 2px 0 0;
+  min-height: 1.2em;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.export-status[data-state="error"] {
+  color: #b91c1c;
+}
+
+.export-status[data-state="success"] {
+  color: #166534;
+}
+
 .layout-element {
   user-select: none;
 }

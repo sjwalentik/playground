@@ -15,6 +15,10 @@ class DesignerApp {
     this.activeInteraction = null;
     this.resizeDirections = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
     this.controlsPanel = document.getElementById("controls-panel");
+    this.exportButton = null;
+    this.exportStatusNode = null;
+    this.exportButtonLabel = "Export as PNG";
+    this.isExporting = false;
 
     this.initializeCanvas();
     this.initializeControls();
@@ -73,12 +77,23 @@ class DesignerApp {
     const deleteButton = this.createControlButton("Delete Selected", () => {
       this.deleteElement();
     });
+    const exportButton = this.createControlButton(this.exportButtonLabel, () => {
+      this.exportAsPng();
+    });
+    const exportStatus = document.createElement("p");
+    exportStatus.className = "export-status";
+    exportStatus.setAttribute("aria-live", "polite");
+    exportStatus.hidden = true;
 
     controlsWrapper.appendChild(createBoxButton);
     controlsWrapper.appendChild(createTextButton);
     controlsWrapper.appendChild(createImageButton);
     controlsWrapper.appendChild(deleteButton);
+    controlsWrapper.appendChild(exportButton);
+    controlsWrapper.appendChild(exportStatus);
     this.controlsPanel.appendChild(controlsWrapper);
+    this.exportButton = exportButton;
+    this.exportStatusNode = exportStatus;
   }
 
   createControlButton(label, onClick) {
@@ -87,6 +102,99 @@ class DesignerApp {
     button.textContent = label;
     button.addEventListener("click", onClick);
     return button;
+  }
+
+  async exportAsPng() {
+    if (this.isExporting) {
+      return;
+    }
+
+    if (typeof window.html2canvas !== "function") {
+      this.showExportStatus(
+        "Export is unavailable right now. Please refresh and try again.",
+        "error"
+      );
+      return;
+    }
+
+    this.isExporting = true;
+    this.setExportLoadingState(true);
+    this.showExportStatus("Exporting PNG...", "info");
+
+    const previousSelectionId = this.selectedElementId;
+
+    try {
+      if (this.activeInteraction) {
+        this.endInteraction();
+      }
+
+      this.selectElement(null);
+      await this.nextAnimationFrame();
+
+      const { width, height } = this.getCanvasSize();
+      const renderedCanvas = await window.html2canvas(this.canvas, {
+        scale: 1,
+        width,
+        height,
+      });
+      const pngDataUrl = renderedCanvas.toDataURL("image/png");
+      const filename = this.getExportFilename();
+      this.triggerDownload(pngDataUrl, filename);
+      this.showExportStatus(`PNG downloaded as ${filename}`, "success");
+    } catch (error) {
+      // Keep console details for debugging while showing a user-friendly message.
+      console.error("PNG export failed:", error);
+      this.showExportStatus("Unable to export PNG. Please try again.", "error");
+    } finally {
+      this.selectElement(previousSelectionId);
+      this.setExportLoadingState(false);
+      this.isExporting = false;
+    }
+  }
+
+  setExportLoadingState(isLoading) {
+    if (!this.exportButton) {
+      return;
+    }
+    this.exportButton.disabled = isLoading;
+    this.exportButton.textContent = isLoading
+      ? "Exporting..."
+      : this.exportButtonLabel;
+  }
+
+  showExportStatus(message, state) {
+    if (!this.exportStatusNode) {
+      return;
+    }
+
+    this.exportStatusNode.textContent = message;
+    this.exportStatusNode.dataset.state = state || "";
+    this.exportStatusNode.hidden = !message;
+  }
+
+  getExportFilename(now = new Date()) {
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    return `layout-${year}-${month}-${day}-${hours}${minutes}${seconds}.png`;
+  }
+
+  triggerDownload(dataUrl, filename) {
+    const downloadLink = document.createElement("a");
+    downloadLink.href = dataUrl;
+    downloadLink.download = filename;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+  }
+
+  nextAnimationFrame() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(resolve);
+    });
   }
 
   createBox() {
